@@ -1,0 +1,407 @@
+---
+title: "Assignment 2 - FMLA"
+author: "Deepika"
+date: "2026-10-03"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r}
+# Load required packages
+library(class)
+library(caret)
+library(dplyr)
+```
+
+#Load the dataset
+```{r}
+getwd()
+list.files()
+file.exists("UniversalBank.csv")
+```
+
+
+```{r}
+getwd()
+file.exists("UniversalBank.csv")
+
+```
+
+
+```{r}
+bank <- read.csv("C:/Users/Manager/OneDrive/Documents/DataSets/UniversalBank.csv")
+
+
+head(bank)
+dim(bank)
+names(bank)
+str(bank)
+
+```
+
+```{r}
+table(bank$Personal.Loan)
+
+```
+#Create Dummy Variables
+```{r}
+bank$Education <- factor(bank$Education)
+education_dummies <- dummyVars(~ Education, data = bank)
+
+education_data <- predict(education_dummies, newdata = bank)
+education_data <- as.data.frame(education_data)
+
+head(education_data)
+
+```
+
+```{r}
+names(education_data) <- c("Education_1", "Education_2", "Education_3")
+
+```
+
+#Create the predictor dataset
+
+```{r}
+X <- bank %>%
+  select(
+    Age,
+    Experience,
+    Income,
+    Family,
+    CCAvg,
+    Mortgage,
+    Securities.Account,
+    CD.Account,
+    Online,
+    CreditCard
+  )
+
+
+#Adding dummy variable
+
+X <- cbind(X, education_data)
+head(X)
+
+```
+
+#Create the target variable
+```{r}
+y <- factor(bank$Personal.Loan, levels = c(0, 1))
+table(y)
+
+```
+
+#Split the dataset
+```{r}
+set.seed(123)
+
+#Create the partition
+train_index <- createDataPartition(
+  y,
+  p = 0.60,
+  list = FALSE
+)
+
+#Create validation and validation dataset
+
+X_train <- X[train_index, ]
+X_valid <- X[-train_index, ]
+
+y_train <- y[train_index]
+y_valid <- y[-train_index]
+
+
+#Check the dataset
+
+nrow(X_train)
+nrow(X_valid)
+
+```
+```{r}
+#Standarize the Predictors
+
+preprocess <- preProcess(
+  X_train,
+  method = c("center", "scale")
+)
+X_train_scaled <- predict(preprocess, X_train)
+X_valid_scaled <- predict(preprocess, X_valid)
+
+```
+#Question 1
+
+#Perform a k-NN classification with all predictors except ID and ZIP code using k = 1.
+
+```{r}
+knn_1 <- knn(
+  train = X_train_scaled,
+  test = X_valid_scaled,
+  cl = y_train,
+  k = 1
+)
+table(knn_1)
+
+```
+```{r}
+#Create the Confusion Matrix
+
+confusionMatrix(
+  knn_1,
+  y_valid,
+  positive = "1"
+)
+
+```
+```{r}
+customer <- data.frame(
+  Age = 40,
+  Experience = 10,
+  Income = 84,
+  Family = 2,
+  CCAvg = 2,
+  Mortgage = 0,
+  Securities.Account = 0,
+  CD.Account = 0,
+  Online = 1,
+  CreditCard = 1,
+  Education_1 = 0,
+  Education_2 = 1,
+  Education_3 = 0
+)
+customer
+
+
+```
+
+#Scaling
+```{r}
+X_train_scaled <- scale(X_train)
+
+```
+
+#Scale the validation data using the training mean and standard deviation
+```{r}
+customer_scaled <- scale(
+  customer,
+  center = attr(X_train_scaled, "scaled:center"),
+  scale = attr(X_train_scaled, "scaled:scale")
+)
+
+#Run knn with k=1
+customer_k1 <- knn(
+  train = X_train_scaled,
+  test = customer_scaled,
+  cl = y_train,
+  k = 1
+)
+
+customer_k1
+
+```
+# Here k-NN with k = 1, so the customer is classified as 0 (Personal Loan = No). Therefore, the model predicts that this customer will not accept the personal loan offer.
+
+#Question 2
+
+```{r}
+#What is a choice of k that balances between overfitting and ignoring the predictor information?
+
+k_values <- seq(1, 25, 2)
+accuracy <- c()
+
+for (k in k_values) {
+  knn_model <- knn(
+    X_train_scaled,
+    X_valid_scaled,
+    y_train,
+    k = k
+  )
+  
+  accuracy <- c(
+    accuracy,
+    mean(knn_model == y_valid)
+  )
+}
+
+results <- data.frame(
+  k = k_values,
+  accuracy = accuracy
+)
+
+results
+
+```
+```{r}
+best_k <- results$k[which.max(results$accuracy)]
+best_k
+results
+
+```
+# k = 1 because it produced the highest validation accuracy of 96.45% among the k values tested. However, k = 1 can be sensitive to individual observations and may overfit the training data.
+
+#Question 3
+#Show the confusion matrix for the validation data that results from using the best k.
+
+```{r}
+best_prediction <- knn(
+  X_train_scaled,
+  X_valid_scaled,
+  y_train,
+  k = best_k
+)
+table(
+  Predicted = best_prediction,
+  Actual = y_valid
+)
+
+```
+
+#Calculate the Accuracy
+```{r}
+(1793 + 136) / (1793 + 56 + 15 + 136)
+
+```
+#The validation confusion matrix shows 1,793 correctly classified customers in class 0 and 136 correctly classified customers in class. The validation accuracy was 96.45%. The sensitivity for the loan-acceptance class was 70.83%, while specificity was 99.17%.
+
+
+#Question 4
+# Classify the customer using the best k
+
+```{r}
+customer_best <- knn(
+  X_train_scaled,
+  customer_scaled,
+  y_train,
+  k = best_k
+)
+
+customer_best
+```
+
+#The selected value of k = 1, the customer is classified as 0 (Personal Loan = No).So,the model predicts that the customer will not accept the personal loan.
+
+#Question 5
+#Compare the confusion matrix of the test set with that of the training and validation sets. Comment on the differences and their reason.
+
+```{r}
+set.seed(123)
+
+train_index <- createDataPartition(
+  y,
+  p = 0.50,
+  list = FALSE
+)
+```
+
+
+```{r}
+X_train2 <- X[train_index, ]
+y_train2 <- y[train_index]
+
+X_remaining <- X[-train_index, ]
+y_remaining <- y[-train_index]
+
+
+```
+
+#Split the data
+```{r}
+valid_index <- createDataPartition(
+  y_remaining,
+  p = 0.60,
+  list = FALSE
+)
+```
+
+#Create Validation and testing
+```{r}
+X_valid2 <- X_remaining[valid_index, ]
+y_valid2 <- y_remaining[valid_index]
+
+X_test2 <- X_remaining[-valid_index, ]
+y_test2 <- y_remaining[-valid_index]
+
+nrow(X_train2)
+nrow(X_valid2)
+nrow(X_test2)
+
+```
+
+#Scaling
+```{r}
+X_train2_scaled <- scale(X_train2)
+
+X_valid2_scaled <- scale(
+  X_valid2,
+  center = attr(X_train2_scaled, "scaled:center"),
+  scale = attr(X_train2_scaled, "scaled:scale")
+)
+
+X_test2_scaled <- scale(
+  X_test2,
+  center = attr(X_train2_scaled, "scaled:center"),
+  scale = attr(X_train2_scaled, "scaled:scale")
+)
+
+```
+
+#Best k
+```{r}
+pred_train <- knn(
+  X_train2_scaled,
+  X_train2_scaled,
+  y_train2,
+  k = best_k
+)
+
+pred_valid <- knn(
+  X_train2_scaled,
+  X_valid2_scaled,
+  y_train2,
+  k = best_k
+)
+
+pred_test <- knn(
+  X_train2_scaled,
+  X_test2_scaled,
+  y_train2,
+  k = best_k
+)
+
+```
+
+#Confusion Matrix
+```{r}
+#Training
+table(
+  Predicted = pred_train,
+  Actual = y_train2
+)
+
+```
+
+#Validation
+```{r}
+table(
+  Predicted = pred_valid,
+  Actual = y_valid2
+)
+
+
+```
+
+#Test
+```{r}
+table(
+  Predicted = pred_test,
+  Actual = y_test2
+)
+
+```
+
+
+#Training: 100% accuracy
+#Validation: 96.67% accuracy
+#Test: 96.70% accuracy.
+
+#Difference is overfitting caused by k = 1 and the training performance is higher than the validation and test performance because k-NN with k = 1 can overfit the training data.
